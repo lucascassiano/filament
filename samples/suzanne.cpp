@@ -52,6 +52,27 @@ struct App {
 
 static const char* IBL_FOLDER = "envs/venetian_crossroads";
 
+static void preRender(Engine* engine, View*, Scene* scene,  filament::Renderer*) {
+
+	static bool s_done = false;
+
+	if (!s_done)
+	{
+		s_done = true;
+
+		IndexBuffer* indexBuffer = IndexBuffer::Builder()
+			.indexCount(6)
+			.build(*engine);
+
+		const static uint32_t indices[] = {
+			0, 1, 2, 2, 3, 0
+		};
+		indexBuffer->setBuffer(*engine, IndexBuffer::BufferDescriptor(
+			indices, indexBuffer->getIndexCount() * sizeof(uint32_t)));
+	}
+
+}
+
 int main(int argc, char** argv) {
     Config config;
     config.title = "suzanne";
@@ -114,7 +135,7 @@ int main(int argc, char** argv) {
         engine->destroy(app.ao);
     };
 
-    FilamentApp::get().run(config, setup, cleanup);
+    FilamentApp::get().run(config, setup, cleanup, FilamentApp::ImGuiCallback(), preRender);
 
     return 0;
 }
