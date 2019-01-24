@@ -423,13 +423,19 @@ VulkanTexture::VulkanTexture(VulkanContext& context, SamplerType target, uint8_t
         imageInfo.arrayLayers = 6;
         imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     }
-    if (usage == TextureUsage::COLOR_ATTACHMENT) {
+    if (usage & TextureUsage::COLOR_ATTACHMENT) {
         imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    } else if (usage == TextureUsage::DEPTH_ATTACHMENT) {
+    }
+    if (usage & TextureUsage::DEPTH_ATTACHMENT) {
         imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    } else {
+    }
+    if (usage & TextureUsage::STENCIL_ATTACHMENT) {
+        imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    }
+    if (usage & TextureUsage::UPLOADABLE) {
         imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
+
     VkResult error = vkCreateImage(context.device, &imageInfo, VKALLOC, &textureImage);
     if (error) {
         utils::slog.d << "vkCreateImage: "
