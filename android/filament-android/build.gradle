@@ -77,6 +77,11 @@ android {
     sourceSets {
         main {
             jni.srcDirs "src/main/cpp"
+            jniLibs {
+                if (project.hasProperty('extra_cmake_args') && extra_cmake_args.contains("VULKAN")) {
+                    srcDirs = ["${android.ndkDirectory}/sources/third_party/vulkan/src/build-android/jniLibs"]
+                }
+            }
         }
     }
 
