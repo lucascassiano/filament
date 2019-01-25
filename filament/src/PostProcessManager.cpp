@@ -202,15 +202,15 @@ FrameGraphResource PostProcessManager::msaa(FrameGraph& fg,
             [&](FrameGraph::Builder& builder, PostProcessMSAA& data) {
                 auto const* inputDesc = fg.getDescriptor(input);
                 data.input = builder.blit(input);
-                data.inRenderTarget = builder.declareRenderTarget(data.input);
+                data.inRenderTarget = builder.useRenderTarget(data.input);
 
                 FrameGraphResource::Descriptor outputDesc{
                         .width = inputDesc->width,
                         .height = inputDesc->height,
                         .format = outFormat
                 };
-                data.output = builder.write(builder.declareTexture("msaa output", outputDesc));
-                data.outRenderTarget = builder.declareRenderTarget(data.output);
+                data.output = builder.write(builder.createTexture("msaa output", outputDesc));
+                data.outRenderTarget = builder.useRenderTarget(data.output);
             },
             [=](FrameGraphPassResources const& resources,
                     PostProcessMSAA const& data, DriverApi& driver) {
@@ -251,8 +251,8 @@ FrameGraphResource PostProcessManager::toneMapping(FrameGraph& fg,
                         .format = outFormat
                 };
                 data.output = builder.write(
-                        builder.declareTexture("tonemapping output", outputDesc));
-                data.outRenderTarget = builder.declareRenderTarget(data.output);
+                        builder.createTexture("tonemapping output", outputDesc));
+                data.outRenderTarget = builder.useRenderTarget(data.output);
             },
             [=](FrameGraphPassResources const& resources,
                     PostProcessToneMapping const& data, DriverApi& driver) {
@@ -303,8 +303,8 @@ FrameGraphResource PostProcessManager::fxaa(FrameGraph& fg,
                         .height = inputDesc->height,
                         .format = outFormat
                 };
-                data.output = builder.write(builder.declareTexture("fxaa output", outputDesc));
-                data.outRenderTarget = builder.declareRenderTarget(data.output);
+                data.output = builder.write(builder.createTexture("fxaa output", outputDesc));
+                data.outRenderTarget = builder.useRenderTarget(data.output);
             },
             [=](FrameGraphPassResources const& resources,
                     PostProcessFXAA const& data, DriverApi& driver) {
@@ -343,15 +343,15 @@ FrameGraphResource PostProcessManager::dynamicScaling(FrameGraph& fg,
             [&](FrameGraph::Builder& builder, PostProcessScaling& data) {
                 auto* inputDesc = fg.getDescriptor(input);
                 data.input = builder.blit(input);
-                data.inRenderTarget = builder.declareRenderTarget(data.input);
+                data.inRenderTarget = builder.useRenderTarget(data.input);
 
                 FrameGraphResource::Descriptor outputDesc{
                         .width = inputDesc->width,
                         .height = inputDesc->height,
                         .format = outFormat
                 };
-                data.output = builder.write(builder.declareTexture("scale output", outputDesc));
-                data.outRenderTarget = builder.declareRenderTarget(data.output);
+                data.output = builder.write(builder.createTexture("scale output", outputDesc));
+                data.outRenderTarget = builder.useRenderTarget(data.output);
             },
             [=](FrameGraphPassResources const& resources,
                     PostProcessScaling const& data, DriverApi& driver) {

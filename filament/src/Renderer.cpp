@@ -231,7 +231,7 @@ void FRenderer::renderJob(ArenaScope& arena, FView& view) {
      */
 
 
-#define USE_FRAME_GRAPH false
+#define USE_FRAME_GRAPH true
 
     if (UTILS_LIKELY(hasPostProcess)) {
         driver.pushGroupMarker("Post Processing");

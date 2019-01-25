@@ -19,6 +19,8 @@
 
 #include "driver/DriverApiForward.h"
 
+#include <utils/Allocator.h>
+
 #include <limits>
 
 #include <stdint.h>
@@ -40,6 +42,11 @@ public:
 template <typename Data, typename Execute>
 class FrameGraphPass final : private FrameGraphPassExecutor {
     friend class FrameGraph;
+
+    // allow our allocators to instantiate us
+    template<typename, typename, typename>
+    friend class utils::Arena;
+
     explicit FrameGraphPass(Execute&& execute) noexcept
             : FrameGraphPassExecutor(), mExecute(std::forward<Execute>(execute)) {
     }

@@ -58,29 +58,27 @@ public:
         Builder(Builder const&) = delete;
         Builder& operator=(Builder const&) = delete;
 
-        // TODO: should this always register a write? If the GPU doesn't write into the resource
-        // what's the point of creating it?
         // Create a virtual resource that can eventually turn into a concrete texture or
         // render target
-        FrameGraphResource declareTexture(const char* name,
+        FrameGraphResource createTexture(const char* name,
                 FrameGraphResource::Descriptor const& desc = {}) noexcept;
-
-        FrameGraphRenderTarget declareRenderTarget(const char* name,
-                FrameGraphRenderTarget::Descriptor const& desc = {}) noexcept;
-
-        FrameGraphRenderTarget declareRenderTarget(FrameGraphResource texture) noexcept;
 
         // Read from a resource (i.e. add a reference to that resource)
         FrameGraphResource read(FrameGraphResource const& input);
 
-        // The resource will be used as a source of a blit()
-        FrameGraphResource blit(FrameGraphResource const& input);
-
-        // TODO: should write be replaced by declareRenderTarget()?
         // Write to a resource (i.e. add a reference to the pass that's doing the writing))
         // Writing to a resource makes its handle invalid.
         // Writing to an imported resources adds a side-effect (see sideEffect() below).
         FrameGraphResource write(FrameGraphResource const& output);
+
+        FrameGraphRenderTarget useRenderTarget(const char* name,
+                FrameGraphRenderTarget::Descriptor const& desc = {}) noexcept;
+
+        FrameGraphRenderTarget useRenderTarget(FrameGraphResource texture) noexcept;
+        
+        // The resource will be used as a source of a blit()
+        FrameGraphResource blit(FrameGraphResource const& input);
+
 
         // Declare that this pass has side effects outside the framegraph (i.e. it can't be culled)
         // Calling write() on an imported resource automatically adds a side-effect.
@@ -110,8 +108,8 @@ public:
     FrameGraphPass<Data, Execute>& addPass(const char* name, Setup setup, Execute&& execute) {
         static_assert(sizeof(Execute) < 1024, "Execute() lambda is capturing too much data.");
 
-        // create the FrameGraph pass (TODO: use special allocator)
-        auto* const pass = new FrameGraphPass<Data, Execute>(std::forward<Execute>(execute));
+        // create the FrameGraph pass
+        auto* const pass = mArena.make<FrameGraphPass<Data, Execute>>(std::forward<Execute>(execute));
 
         // record in our pass list
         fg::PassNode& node = createPass(name, pass);
@@ -190,10 +188,19 @@ private:
 
     details::LinearAllocatorArena mArena;
 
-    Vector<fg::PassNode> mPassNodes;           // list of frame graph passes
-    Vector<fg::ResourceNode> mResourceNodes;
+    template <typename T>
+    struct Deleter {
+        FrameGraph& fg;
+        Deleter(FrameGraph& fg) noexcept : fg(fg) {} // NOLINT(google-explicit-constructor)
+        void operator()(T* object) noexcept { fg.mArena.destroy(object); }
+    };
+    template <typename T>
+    using UniquePtr = std::unique_ptr<T, Deleter<T>>;
+
+    Vector<fg::PassNode> mPassNodes;                    // list of frame graph passes
+    Vector<fg::ResourceNode> mResourceNodes;            // list of resource nodes
+    Vector<UniquePtr<fg::Resource>> mResourceRegistry;  // list actual resources
     Vector<fg::RenderTarget> mRenderTargets;
-    Vector<fg::Resource> mResourceRegistry;    // frame graph concrete resources
     Vector<fg::Alias> mAliases;
 };
 

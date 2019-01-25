@@ -101,6 +101,7 @@ public:
         uint32_t width = 1;             // width of resource in pixel
         uint32_t height = 1;            // height of resource in pixel
         uint8_t samples = 1;            // # of samples
+        // TODO: maybe make this an array, so we can reuse code better
         struct {
             FrameGraphResource color;   // color attachment
             FrameGraphResource depth;   // depth attachment
