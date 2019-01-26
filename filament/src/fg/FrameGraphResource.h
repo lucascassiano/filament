@@ -45,12 +45,15 @@ class FrameGraphResource {
     friend struct fg::PassNode;
     friend struct fg::RenderTarget;
 
-    FrameGraphResource(uint16_t index, uint8_t version) noexcept
-            : index(index), version(version) {}
+    FrameGraphResource(uint16_t index, uint8_t version, uint16_t rtIndex) noexcept
+            : index(index), renderTargetIndex(rtIndex), version(version) {}
 
     static constexpr uint16_t UNINITIALIZED = std::numeric_limits<uint16_t>::max();
     // index to the resource handle
     uint16_t index = UNINITIALIZED;
+
+    mutable uint16_t renderTargetIndex = UNINITIALIZED;
+
     // version of the resource when it was created. When this version doesn't match the
     // resource handle's version, this resource has become invalid.
     uint8_t version = 0;
@@ -83,45 +86,18 @@ public:
 };
 
 
-class FrameGraphRenderTarget {
-    friend class FrameGraph;
-    friend class FrameGraphPassResources;
-    friend struct fg::PassNode;
-
-    explicit FrameGraphRenderTarget(uint16_t index) noexcept : index(index) {}
-
-    static constexpr uint16_t UNINITIALIZED = std::numeric_limits<uint16_t>::max();
-    // index to the resource handle
-    uint16_t index = UNINITIALIZED;
-
-public:
-    FrameGraphRenderTarget() noexcept = default;
-
-    struct Descriptor {
-        uint32_t width = 1;             // width of resource in pixel
-        uint32_t height = 1;            // height of resource in pixel
-        uint8_t samples = 1;            // # of samples
-        // TODO: maybe make this an array, so we can reuse code better
-        struct {
-            FrameGraphResource color;   // color attachment
-            FrameGraphResource depth;   // depth attachment
-        } attachments;
-    };
-
-    bool isValid() const noexcept { return index != UNINITIALIZED; }
-
-    bool operator < (const FrameGraphRenderTarget& rhs) const noexcept {
-        return (index < rhs.index);
-    }
-
-    bool operator == (const FrameGraphRenderTarget& rhs) const noexcept {
-        return (index == rhs.index);
-    }
-
-    bool operator != (const FrameGraphRenderTarget& rhs) const noexcept {
-        return !operator==(rhs);
-    }
+namespace FrameGraphRenderTarget {
+struct Descriptor {
+    uint32_t width = 1;             // width of resource in pixel
+    uint32_t height = 1;            // height of resource in pixel
+    uint8_t samples = 1;            // # of samples
+    // TODO: maybe make this an array, so we can reuse code better
+    struct {
+        FrameGraphResource color;   // color attachment
+        FrameGraphResource depth;   // depth attachment
+    } attachments;
 };
+}
 
 
 } // namespace filament

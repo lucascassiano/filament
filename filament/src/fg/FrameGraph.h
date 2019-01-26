@@ -55,6 +55,11 @@ public:
 
     class Builder {
     public:
+        struct Attachments {
+            enum { COLOR, DEPTH };
+            FrameGraphResource textures[2] = {};
+        };
+
         Builder(Builder const&) = delete;
         Builder& operator=(Builder const&) = delete;
 
@@ -69,13 +74,12 @@ public:
         // Write to a resource (i.e. add a reference to the pass that's doing the writing))
         // Writing to a resource makes its handle invalid.
         // Writing to an imported resources adds a side-effect (see sideEffect() below).
-        FrameGraphResource write(FrameGraphResource const& output);
 
-        FrameGraphRenderTarget useRenderTarget(const char* name,
+        Attachments useRenderTarget(const char* name,
                 FrameGraphRenderTarget::Descriptor const& desc = {}) noexcept;
 
-        FrameGraphRenderTarget useRenderTarget(FrameGraphResource texture) noexcept;
-        
+        Attachments useRenderTarget(FrameGraphResource texture) noexcept;
+
         // The resource will be used as a source of a blit()
         FrameGraphResource blit(FrameGraphResource const& input);
 
@@ -85,6 +89,9 @@ public:
         Builder& sideEffect() noexcept;
 
     private:
+        // this is private for now because we only have textures, and this is for regular buffers
+        FrameGraphResource write(FrameGraphResource const& output);
+
         friend class FrameGraph;
         Builder(FrameGraph& fg, fg::PassNode& pass) noexcept;
         ~Builder() noexcept;

@@ -40,7 +40,7 @@ public:
 
     Handle <HwTexture> getTexture(FrameGraphResource r) const noexcept;
 
-    RenderTargetInfo const& getRenderTarget(FrameGraphRenderTarget r) const noexcept;
+    RenderTargetInfo const& getRenderTarget(FrameGraphResource r) const noexcept;
 
     FrameGraphResource::Descriptor const& getDescriptor(FrameGraphResource r) const noexcept;
 

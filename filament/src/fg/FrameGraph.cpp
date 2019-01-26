@@ -82,11 +82,8 @@ struct Resource {
     void create(DriverApi& driver) noexcept;
     void destroy(DriverApi& driver) noexcept;
 
-    // can't use union without implementing the move ctor manually. not a problem right now.
-    //union {
+    uint16_t renderTargetIndex = 0;
     Handle<HwTexture> texture;
-    uint16_t renderTargetIndex;
-    //};
 };
 
 struct ResourceNode {
@@ -98,7 +95,9 @@ struct ResourceNode {
 
     // constants
     Resource* resource = nullptr;
-    const uint16_t index; // this could be stored in Resource, but this avoids many dereference.
+
+    // below this could be stored in Resource, but this avoids many dereference.
+    const uint16_t index;
 
     // updated by the builder
     uint8_t version = 0;
@@ -224,20 +223,25 @@ struct PassNode {
         renderTargets.push_back(renderTarget.index);
     }
 
-    FrameGraphResource read(ResourceNode const& resource) {
+    FrameGraphResource read(FrameGraph& fg, FrameGraphResource const& handle) {
+        ResourceNode* resource = fg.getResource(handle);
+        if (!resource) {
+            return {};
+        }
+
         // don't allow multiple reads of the same resource -- it's just redundant.
         auto pos = std::find_if(reads.begin(), reads.end(),
-                [&resource](FrameGraphResource cur) { return resource.index == cur.index; });
+                [&handle](FrameGraphResource cur) { return handle.index == cur.index; });
         if (pos != reads.end()) {
             return *pos;
         }
 
-        FrameGraphResource r{ resource.index, resource.version };
+        FrameGraphResource r{ handle.index, handle.version, handle.renderTargetIndex };
 
         // now figure out if we already recorded a write to this resource, and if so, use the
         // previous version number to record the read. i.e. pretend the read() was recorded first.
         pos = std::find_if(writes.begin(), writes.end(),
-                [&resource](FrameGraphResource cur) { return resource.index == cur.index; });
+                [&handle](FrameGraphResource cur) { return handle.index == cur.index; });
         if (pos != writes.end()) {
             r.version--;
         }
@@ -253,10 +257,15 @@ struct PassNode {
         return (pos != reads.end());
     }
 
-    FrameGraphResource write(ResourceNode& node) {
+    FrameGraphResource write(FrameGraph& fg, const FrameGraphResource& handle) {
+        ResourceNode* resource = fg.getResource(handle);
+        if (!resource) {
+            return {};
+        }
+
         // don't allow multiple writes of the same resource -- it's just redundant.
         auto pos = std::find_if(writes.begin(), writes.end(),
-                [&node](FrameGraphResource cur) { return node.index == cur.index; });
+                [&handle](FrameGraphResource cur) { return handle.index == cur.index; });
         if (pos != writes.end()) {
             return *pos;
         }
@@ -274,18 +283,18 @@ struct PassNode {
          *         +-> [R2] -+        // failure when setting R2 from (A)
          *
          */
-        ++node.version;
+        ++resource->version;
         // writing to an imported resource should count as a side-effect
-        if (node.resource->imported) {
+        if (resource->resource->imported) {
             hasSideEffect = true;
         }
         // record the write
-        FrameGraphResource r{ node.index, node.version };
+        FrameGraphResource r{ resource->index, resource->version, handle.renderTargetIndex };
         writes.push_back(r);
         return r;
     }
 
-    bool isWritingTo(FrameGraphRenderTarget const& renderTarget) const noexcept {
+    bool isWritingTo(const RenderTarget& renderTarget) const noexcept {
         auto pos = std::find_if(renderTargets.begin(), renderTargets.end(),
                 [index = renderTarget.index](uint16_t cur) { return index == cur; });
         return (pos != renderTargets.end());
@@ -367,12 +376,18 @@ FrameGraph::Builder::~Builder() noexcept = default;
 FrameGraphResource FrameGraph::Builder::createTexture(
         const char* name, FrameGraphResource::Descriptor const& desc) noexcept {
     ResourceNode& resource = mFrameGraph.createResource(name, desc, false);
-    return { resource.index, resource.version };
+    return { resource.index, resource.version, FrameGraphResource::UNINITIALIZED };
 }
 
-FrameGraphRenderTarget FrameGraph::Builder::useRenderTarget(
+FrameGraph::Builder::Attachments FrameGraph::Builder::useRenderTarget(
         const char* name, FrameGraphRenderTarget::Descriptor const& desc) noexcept {
     FrameGraph& fg = mFrameGraph;
+
+    // TODO: this must also imply a "read without sampler"
+
+    Attachments rt{};
+    RenderTarget& renderTarget = fg.createRenderTarget(name, desc, false);
+    mPass.declareRenderTarget(renderTarget);
 
     // update the referenced textures usage flags
     if (desc.attachments.color.isValid()) {
@@ -380,6 +395,11 @@ FrameGraphRenderTarget FrameGraph::Builder::useRenderTarget(
         uint8_t usage = r->resource->usage;
         usage |= TextureUsage::COLOR_ATTACHMENT;
         r->resource->usage = TextureUsage(usage);
+
+        // FIXME: how to detect that a handle already has render target?
+        //assert(desc.attachments.color.renderTargetIndex == FrameGraphResource::UNINITIALIZED);
+        rt.textures[0] = write(desc.attachments.color);
+        rt.textures[0].renderTargetIndex = renderTarget.index;
     }
 
     if (desc.attachments.depth.isValid()) {
@@ -387,14 +407,17 @@ FrameGraphRenderTarget FrameGraph::Builder::useRenderTarget(
         uint8_t usage = r->resource->usage;
         usage |= TextureUsage::DEPTH_ATTACHMENT;
         r->resource->usage = TextureUsage(usage);
+
+        // FIXME: how to detect that a handle already has render target?
+        //assert(desc.attachments.depth.renderTargetIndex == FrameGraphResource::UNINITIALIZED);
+        rt.textures[1] = write(desc.attachments.depth);
+        rt.textures[1].renderTargetIndex = renderTarget.index;
     }
 
-    RenderTarget& renderTarget = fg.createRenderTarget(name, desc, false);
-    mPass.declareRenderTarget(renderTarget);
-    return FrameGraphRenderTarget{ renderTarget.index };
+    return rt;
 }
 
-FrameGraphRenderTarget FrameGraph::Builder::useRenderTarget(FrameGraphResource texture) noexcept {
+FrameGraph::Builder::Attachments FrameGraph::Builder::useRenderTarget(FrameGraphResource texture) noexcept {
     ResourceNode* pResourceNode = mFrameGraph.getResource(texture);
     assert(pResourceNode);
     Resource* pResource = pResourceNode->resource;
@@ -409,27 +432,15 @@ FrameGraphRenderTarget FrameGraph::Builder::useRenderTarget(FrameGraphResource t
 }
 
 FrameGraphResource FrameGraph::Builder::read(FrameGraphResource const& input) {
-    ResourceNode* resource = mFrameGraph.getResource(input);
-    if (!resource) {
-        return {};
-    }
-    return mPass.read(*resource);
+    return mPass.read(mFrameGraph, input);
 }
 
 FrameGraphResource FrameGraph::Builder::blit(FrameGraphResource const& input) {
-    ResourceNode* resource = mFrameGraph.getResource(input);
-    if (!resource) {
-        return {};
-    }
-    return mPass.read(*resource);
+    return mPass.read(mFrameGraph, input);
 }
 
 FrameGraphResource FrameGraph::Builder::write(FrameGraphResource const& output) {
-    ResourceNode* resource = mFrameGraph.getResource(output);
-    if (!resource) {
-        return {};
-    }
-    return mPass.write(*resource);
+    return mPass.write(mFrameGraph, output);
 }
 
 FrameGraph::Builder& FrameGraph::Builder::sideEffect() noexcept {
@@ -456,11 +467,12 @@ Handle <HwTexture> FrameGraphPassResources::getTexture(FrameGraphResource r) con
 }
 
 FrameGraphPassResources::RenderTargetInfo const&
-FrameGraphPassResources::getRenderTarget(FrameGraphRenderTarget r) const noexcept {
-    fg::RenderTarget& renderTarget = mFrameGraph.mRenderTargets[r.index];
+FrameGraphPassResources::getRenderTarget(FrameGraphResource r) const noexcept {
+    fg::RenderTarget& renderTarget = mFrameGraph.mRenderTargets[r.renderTargetIndex];
+    assert(renderTarget.index == r.renderTargetIndex);
 
     // check that this FrameGraphRenderTarget is indeed declared by this pass
-    ASSERT_POSTCONDITION_NON_FATAL(mPass.isWritingTo(r),
+    ASSERT_POSTCONDITION_NON_FATAL(mPass.isWritingTo(renderTarget),
             "Pass \"%s\" doesn't declare rendertarget \"%s\" -- expect graphic corruptions",
             mPass.name, renderTarget.name);
 
@@ -600,7 +612,7 @@ FrameGraphResource FrameGraph::importResource(
     ResourceNode& node = createResource(name, desc, true);
     node.resource->type = Resource::Type::IMPORTED_RENDER_TARGET;
     node.resource->renderTargetIndex = renderTarget.index;
-    return { node.index, node.version };
+    return { node.index, node.version, renderTarget.index };
 }
 
 FrameGraphResource FrameGraph::importResource(
@@ -608,7 +620,7 @@ FrameGraphResource FrameGraph::importResource(
         Handle<HwTexture> color) {
     ResourceNode& node = createResource(name, descriptor, true);
     node.resource->texture = color;
-    return { node.index, node.version };
+    return { node.index, node.version, FrameGraphResource::UNINITIALIZED };
 }
 
 FrameGraph& FrameGraph::compile() noexcept {
